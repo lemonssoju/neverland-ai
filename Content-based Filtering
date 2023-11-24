@@ -1,0 +1,48 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import linear_kernel
+
+movies_df = pd.read_csv('/tmdb_5000_movies.csv')
+
+# 중요한 칼럼만 선택
+selected_columns = ['id', 'title', 'genres', 'keywords']
+movies_df = movies_df[selected_columns]
+
+# 결측치 처리
+movies_df = movies_df.dropna()
+
+# TF-IDF 변환을 위한 벡터화 객체 생성
+tfidf_vectorizer = TfidfVectorizer(stop_words='english', lowercase=True)
+
+# 'genres'와 'keywords' 칼럼을 합친 새로운 칼럼 생성
+movies_df['content'] = movies_df['genres'] + ' ' + movies_df['keywords']
+
+# TF-IDF 행렬 생성
+tfidf_matrix = tfidf_vectorizer.fit_transform(movies_df['content'])
+
+# 코사인 유사도 계산
+cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
+
+# 콘텐츠 기반 필터링
+def content_based_filtering(title, cosine_sim=cosine_sim):
+    # 제목에 해당하는 인덱스 찾기
+    idx = movies_df[movies_df['title'] == title].index[0]
+
+    # 해당 영화에 대한 유사도 측정
+    sim_scores = list(enumerate(cosine_sim[idx]))
+
+    # 유사도에 따라 정렬
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+
+    # 상위 10개 영화 선택
+    sim_scores = sim_scores[1:11]
+
+    # 선택된 영화의 인덱스
+    movie_indices = [i[0] for i in sim_scores]
+
+    # 선택된 영화의 제목으로 반환
+    return movies_df['title'].iloc[movie_indices]
+
+# 예시
+result = content_based_recommendation('Avatar')
+print(result)
