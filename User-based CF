@@ -1,0 +1,70 @@
+import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+# 데이터 로드
+movies_df = pd.read_csv('/content/movies.csv')
+ratings_df = pd.read_csv('/content/ratings.csv')
+
+# 사용자 x 아이템 평가 데이터 생성
+ratings_dict = {}
+for index, row in ratings_df.iterrows():
+    user_id = str(row['userId'])
+    movie_id = str(row['movieId'])
+    rating = row['rating']
+
+    if user_id not in ratings_dict:
+        ratings_dict[user_id] = {}
+
+    ratings_dict[user_id][movie_id] = rating
+    
+    
+# 사용자 기반 협업 필터링 함수
+def user_based_collaborative_filtering(ratings_dict, target_user, k=5):
+    # 특정 사용자와 다른 사용자 간의 유사도 계산
+    similarities = {}
+    target_user_ratings = np.array(list(ratings_dict[target_user].values())).reshape(1, -1)
+
+    for user in ratings_dict:
+        if user == target_user:
+            continue
+
+        other_user_ratings = np.array(list(ratings_dict[user].values())).reshape(1, -1)
+        similarity = cosine_similarity(target_user_ratings, other_user_ratings)[0, 0]
+        similarities[user] = similarity
+
+    # 유사도를 기준으로 내림차순 정렬
+    sorted_similarities = sorted(similarities.items(), key=lambda x: x[1], reverse=True)
+
+    # 상위 k명의 이웃 선택
+    top_k_neighbors = sorted_similarities[:k]
+
+    # 평가하지 않은 영화 추출
+    not_rated_movies = set(movies_df['movieId']) - set(ratings_dict[target_user].keys())
+
+    # 추천 영화 평점 예측
+    movie_recommendations = {}
+    for movie_id in not_rated_movies:
+        weighted_sum = 0
+        similarity_sum = 0
+
+        for neighbor, similarity in top_k_neighbors:
+            if movie_id in ratings_dict[neighbor]:
+                weighted_sum += ratings_dict[neighbor][movie_id] * similarity
+                similarity_sum += similarity
+
+        if similarity_sum > 0:
+            predicted_rating = weighted_sum / similarity_sum
+            movie_recommendations[movie_id] = predicted_rating
+
+    # 예측 평점을 기준으로 상위 영화 선택
+    top_movies = sorted(movie_recommendations.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return top_movies
+
+# 예시
+target_user_id = '1'
+recommendations = user_based_collaborative_filtering(ratings_dict, target_user_id)
+
+result = pd.DataFrame(recommendations, columns=['Movie ID', 'Predicted Rating'])
+print(result)
